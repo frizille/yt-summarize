@@ -66,20 +66,19 @@ def fetch_transcript(youtube_id: str) -> list[dict]:
     Tries English first, then any available transcript.
     Uses YOUTUBE_COOKIES if set to bypass datacenter IP blocking."""
     cookies = _cookies_path()
-    api = YouTubeTranscriptApi(cookies=cookies) if cookies else YouTubeTranscriptApi()
 
     try:
-        result = api.fetch(youtube_id, languages=["en", "en-US", "en-GB"])
-        return [{"text": s.text, "start": s.start, "duration": s.duration} for s in result]
+        return YouTubeTranscriptApi.get_transcript(
+            youtube_id, languages=["en", "en-US", "en-GB"], cookies=cookies
+        )
     except (NoTranscriptFound, TranscriptsDisabled):
         pass
 
     # Fall back to any available transcript (manual or auto-generated).
     try:
-        transcript_list = api.list(youtube_id)
+        transcript_list = YouTubeTranscriptApi.list_transcripts(youtube_id, cookies=cookies)
         transcript = next(iter(transcript_list))
-        result = transcript.fetch()
-        return [{"text": s.text, "start": s.start, "duration": s.duration} for s in result]
+        return transcript.fetch()
     except StopIteration:
         raise RuntimeError("No transcript available for this video.")
     except Exception as e:
