@@ -21,6 +21,8 @@ def _cookies_path() -> str | None:
     content = os.environ.get("YOUTUBE_COOKIES", "").strip()
     if not content:
         return None
+    # Vercel may store multiline values with escaped \n instead of real newlines
+    content = content.replace("\\n", "\n")
     f = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
     f.write(content)
     f.close()
