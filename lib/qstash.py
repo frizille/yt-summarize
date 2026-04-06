@@ -16,6 +16,7 @@ import hmac
 import json
 import os
 import time
+from urllib.parse import quote
 
 import httpx
 
@@ -34,7 +35,7 @@ def publish_job(video_id: int) -> None:
     """Enqueue a processing job. Returns immediately after QStash accepts it."""
     process_url = _process_url()
     resp = httpx.post(
-        f"{QSTASH_API}/{process_url}",
+        f"{QSTASH_API}/{quote(process_url, safe='')}",
         headers={
             "Authorization": f"Bearer {os.environ['QSTASH_TOKEN']}",
             "Content-Type": "application/json",
