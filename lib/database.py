@@ -6,15 +6,29 @@ Set POSTGRES_URL to your Supabase Transaction pooler connection string (port 654
 import os
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
 
 import psycopg2
 import psycopg2.extras
+
+_KNOWN_PSYCOPG2_PARAMS = {"sslmode", "sslcert", "sslkey", "sslrootcert", "connect_timeout", "application_name"}
+
+
+def _clean_dsn(dsn: str) -> str:
+    """Strip query parameters that psycopg2 doesn't understand (e.g. Supabase's supa=...)."""
+    parsed = urlparse(dsn)
+    if not parsed.query:
+        return dsn
+    filtered = {k: v for k, v in parse_qs(parsed.query, keep_blank_values=True).items()
+                if k in _KNOWN_PSYCOPG2_PARAMS}
+    new_query = urlencode({k: v[0] for k, v in filtered.items()})
+    return urlunparse(parsed._replace(query=new_query))
 
 
 @contextmanager
 def get_conn():
     conn = psycopg2.connect(
-        os.environ["POSTGRES_URL"],
+        _clean_dsn(os.environ["POSTGRES_URL"]),
         cursor_factory=psycopg2.extras.RealDictCursor,
     )
     # Auto-deserialize JSONB columns to Python objects on read
