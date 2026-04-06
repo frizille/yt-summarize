@@ -9,10 +9,10 @@ import os
 import anthropic
 
 MODEL = "claude-sonnet-4-20250514"
-client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
 
 def _call(system: str, user: str, max_tokens: int = 512) -> str:
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     resp = client.messages.create(
         model=MODEL,
         max_tokens=max_tokens,
