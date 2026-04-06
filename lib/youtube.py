@@ -1,14 +1,12 @@
 """
 YouTube metadata + transcript extraction.
-- yt-dlp Python API → video metadata, chapters, auto-subs (no subprocess)
-- youtube-transcript-api → transcript text (primary, faster)
+- YouTube oEmbed API → title, thumbnail, channel (no auth required)
+- youtube-transcript-api → transcript text
 """
 
 import re
-import json
-import glob
-import os
-import yt_dlp
+
+import httpx
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 
 
@@ -25,30 +23,22 @@ def extract_video_id(url: str) -> str | None:
 
 
 def fetch_metadata(youtube_id: str) -> dict:
-    """Return title, thumbnail, duration, channel, and chapters via yt-dlp Python API."""
-    url = f"https://www.youtube.com/watch?v={youtube_id}"
-    ydl_opts = {"quiet": True, "no_warnings": True}
-
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-
-    raw_chapters = info.get("chapters") or []
-    chapters = []
-    for i, ch in enumerate(raw_chapters):
-        end = raw_chapters[i + 1]["start_time"] if i + 1 < len(raw_chapters) else info.get("duration")
-        chapters.append({
-            "idx": i,
-            "title": ch["title"],
-            "start_sec": ch["start_time"],
-            "end_sec": end,
-        })
+    """Return title, thumbnail, channel via YouTube oEmbed. No yt-dlp (blocked on datacenter IPs)."""
+    oembed_url = (
+        f"https://www.youtube.com/oembed"
+        f"?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D{youtube_id}"
+        f"&format=json"
+    )
+    resp = httpx.get(oembed_url, timeout=10, follow_redirects=True)
+    resp.raise_for_status()
+    data = resp.json()
 
     return {
-        "title": info.get("title", "Untitled"),
-        "thumbnail": info.get("thumbnail"),
-        "duration": info.get("duration", 0),
-        "channel": info.get("channel") or info.get("uploader"),
-        "chapters": chapters,
+        "title": data.get("title", "Untitled"),
+        "thumbnail": data.get("thumbnail_url"),
+        "duration": 0,
+        "channel": data.get("author_name"),
+        "chapters": [],  # oEmbed doesn't expose chapters; use full-transcript summarization
     }
 
 
@@ -57,44 +47,7 @@ def fetch_transcript(youtube_id: str) -> list[dict]:
     try:
         return YouTubeTranscriptApi.get_transcript(youtube_id)
     except (TranscriptsDisabled, NoTranscriptFound):
-        pass
-
-    # Fallback: pull auto-generated subs via yt-dlp Python API
-    output_tmpl = f"/tmp/yt_sub_{youtube_id}"
-    ydl_opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "skip_download": True,
-        "writeautomaticsub": True,
-        "subtitleslangs": ["en"],
-        "subtitlesformat": "json3",
-        "outtmpl": output_tmpl,
-    }
-
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([f"https://www.youtube.com/watch?v={youtube_id}"])
-
-    sub_files = glob.glob(f"{output_tmpl}*.json3")
-    if not sub_files:
         raise RuntimeError("No transcript available for this video.")
-
-    with open(sub_files[0]) as f:
-        data = json.load(f)
-
-    segments = []
-    for event in data.get("events", []):
-        text = "".join(s.get("utf8", "") for s in event.get("segs", [])).strip()
-        if text:
-            segments.append({
-                "text": text,
-                "start": event.get("tStartMs", 0) / 1000,
-                "duration": event.get("dDurationMs", 0) / 1000,
-            })
-
-    for fp in sub_files:
-        os.remove(fp)
-
-    return segments
 
 
 def slice_transcript_for_chapter(transcript: list[dict], start_sec: float, end_sec: float | None) -> str:
