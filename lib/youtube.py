@@ -2,12 +2,29 @@
 YouTube metadata + transcript extraction.
 - YouTube oEmbed API → title, thumbnail, channel (no auth required)
 - youtube-transcript-api → transcript text
+
+Set YOUTUBE_COOKIES env var to the contents of a Netscape-format cookies.txt
+file exported from a logged-in YouTube session. This bypasses YouTube's bot
+detection on datacenter IPs. Without it, transcripts may fail on Vercel.
 """
 
+import os
 import re
+import tempfile
 
 import httpx
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
+
+
+def _cookies_path() -> str | None:
+    """Write YOUTUBE_COOKIES env var to a temp file and return the path, or None."""
+    content = os.environ.get("YOUTUBE_COOKIES", "").strip()
+    if not content:
+        return None
+    f = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
+    f.write(content)
+    f.close()
+    return f.name
 
 
 def extract_video_id(url: str) -> str | None:
@@ -44,16 +61,20 @@ def fetch_metadata(youtube_id: str) -> dict:
 
 def fetch_transcript(youtube_id: str) -> list[dict]:
     """Return list of {text, start, duration} segments.
-    Tries English first, then any available transcript."""
+    Tries English first, then any available transcript.
+    Uses YOUTUBE_COOKIES if set to bypass datacenter IP blocking."""
+    cookies = _cookies_path()
+
     try:
-        return YouTubeTranscriptApi.get_transcript(youtube_id, languages=["en", "en-US", "en-GB"])
+        return YouTubeTranscriptApi.get_transcript(
+            youtube_id, languages=["en", "en-US", "en-GB"], cookies=cookies
+        )
     except (NoTranscriptFound, TranscriptsDisabled):
         pass
 
     # Fall back to any available transcript (manual or auto-generated).
-    # Note: TranscriptsDisabled can be a false negative on cloud IPs, so we try anyway.
     try:
-        transcript_list = YouTubeTranscriptApi.list_transcripts(youtube_id)
+        transcript_list = YouTubeTranscriptApi.list_transcripts(youtube_id, cookies=cookies)
         transcript = next(iter(transcript_list))
         return transcript.fetch()
     except StopIteration:
