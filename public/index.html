@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Watch Queue</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Literata:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg0:#0f0f0e;
+  --bg1:#161614;
+  --bg2:#1e1e1c;
+  --bg3:#262624;
+  --tx1:#eeede8;
+  --tx2:#9d9c96;
+  --tx3:#5e5d58;
+  --bd:#2a2a28;
+  --acc:#1D9E75;
+  --acc-dim:#0F6E56;
+  --acc-bg:#04342C;
+  --amber:#EF9F27;
+  --red:#E24B4A;
+}
+html,body{height:100%;background:var(--bg0);color:var(--tx1);font-family:'IBM Plex Mono',monospace}
+.layout{display:flex;height:100vh}
+
+/* ── Sidebar ── */
+.sidebar{width:320px;min-width:320px;display:flex;flex-direction:column;border-right:1px solid var(--bd);background:var(--bg1)}
+.top{padding:18px 16px 12px;border-bottom:1px solid var(--bd)}
+.app-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--tx3);margin-bottom:14px}
+.add-form{display:flex;gap:6px}
+.add-form input{flex:1;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;padding:8px 10px;font-size:12px;color:var(--tx1);font-family:inherit;outline:none;transition:border-color .15s}
+.add-form input::placeholder{color:var(--tx3)}
+.add-form input:focus{border-color:var(--acc)}
+.add-form button{background:var(--acc);border:none;border-radius:6px;padding:8px 12px;font-size:11px;font-weight:500;color:#fff;cursor:pointer;font-family:inherit;letter-spacing:.04em;transition:opacity .15s}
+.add-form button:hover{opacity:.85}
+.add-form button:disabled{opacity:.4;cursor:not-allowed}
+.filters{display:flex;gap:4px;padding:10px 16px;border-bottom:1px solid var(--bd)}
+.pill{padding:4px 11px;border-radius:99px;border:1px solid var(--bd);font-size:10px;cursor:pointer;background:transparent;color:var(--tx2);font-family:inherit;letter-spacing:.04em}
+.pill.on{background:var(--tx1);color:var(--bg0);border-color:var(--tx1)}
+.list{flex:1;overflow-y:auto}
+.item{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--bd);cursor:pointer;transition:background .1s}
+.item:hover{background:var(--bg2)}
+.item.sel{background:var(--bg3)}
+.thumb-box{width:60px;height:38px;border-radius:4px;background:var(--bg2);overflow:hidden;flex-shrink:0}
+.thumb-box img{width:100%;height:100%;object-fit:cover}
+.thumb-box .no-thumb{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:18px}
+.meta{flex:1;min-width:0}
+.mtitle{font-size:11px;font-weight:500;color:var(--tx1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;font-family:'Literata',serif}
+.msub{font-size:10px;color:var(--tx3)}
+.dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.dot.done{background:var(--acc)}
+.dot.queued{background:var(--tx3)}
+.dot.processing{background:var(--amber);animation:pulse 1.1s ease-in-out infinite}
+.dot.error{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.empty-list{padding:40px 20px;text-align:center;color:var(--tx3);font-size:11px;line-height:2}
+
+/* ── Main panel ── */
+.main{flex:1;overflow:hidden;display:flex;flex-direction:column;background:var(--bg0)}
+.placeholder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--tx3)}
+.placeholder-icon{font-size:28px;opacity:.3}
+.placeholder-text{font-size:11px}
+.reader{flex:1;overflow-y:auto;padding:40px 52px;max-width:800px;width:100%;margin:0 auto}
+.r-channel{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx3);margin-bottom:8px}
+.r-title{font-family:'Literata',Georgia,serif;font-size:24px;font-weight:500;color:var(--tx1);line-height:1.3;margin-bottom:16px}
+.badges{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:24px}
+.badge{padding:3px 10px;border-radius:99px;border:1px solid var(--bd);font-size:10px;color:var(--tx2)}
+.badge.done{background:var(--acc-bg);color:var(--acc);border-color:transparent}
+.badge.proc{background:#27200a;color:var(--amber);border-color:transparent}
+.summary-block{border-left:2px solid var(--acc);padding:14px 18px;margin-bottom:28px;background:var(--bg1);border-radius:0 6px 6px 0;font-family:'Literata',Georgia,serif;font-size:14px;line-height:1.75;color:var(--tx1)}
+.section-label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx3);margin-bottom:12px}
+.kp-list{display:flex;flex-direction:column;gap:7px;margin-bottom:32px}
+.kp{display:flex;align-items:baseline;gap:10px;font-size:13px;line-height:1.5;color:var(--tx2);font-family:'Literata',Georgia,serif}
+.kp-dot{width:4px;height:4px;border-radius:50%;background:var(--acc);flex-shrink:0;margin-top:8px}
+.chapter-card{border:1px solid var(--bd);border-radius:8px;margin-bottom:10px;overflow:hidden}
+.ch-head{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg1)}
+.ch-ts{font-size:10px;color:var(--tx3);min-width:38px;font-family:'IBM Plex Mono',monospace}
+.ch-name{font-size:12px;font-weight:500;color:var(--tx1);flex:1}
+.ch-body{padding:12px 14px;font-size:13px;line-height:1.7;color:var(--tx2);font-family:'Literata',Georgia,serif;border-top:1px solid var(--bd)}
+.processing-view{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--tx2)}
+.spinner{width:20px;height:20px;border:2px solid var(--bd);border-top-color:var(--acc);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.proc-msg{font-size:12px;color:var(--tx3)}
+.error-view{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+.err-label{font-size:12px;color:var(--red)}
+.retry-btn{background:transparent;border:1px solid var(--bd);border-radius:6px;padding:7px 16px;font-size:11px;color:var(--tx2);cursor:pointer;font-family:inherit;transition:border-color .15s}
+.retry-btn:hover{border-color:var(--tx2)}
+</style>
+</head>
+<body>
+<div class="layout">
+  <div class="sidebar">
+    <div class="top">
+      <div class="app-label">Watch Queue</div>
+      <div class="add-form">
+        <input type="text" id="url-input" placeholder="Paste YouTube URL…" />
+        <button id="add-btn" onclick="addVideo()">Add</button>
+      </div>
+    </div>
+    <div class="filters">
+      <button class="pill on" onclick="setFilter('all',this)">All</button>
+      <button class="pill" onclick="setFilter('queued',this)">Queued</button>
+      <button class="pill" onclick="setFilter('processing',this)">Processing</button>
+      <button class="pill" onclick="setFilter('done',this)">Done</button>
+      <button class="pill" onclick="setFilter('error',this)">Error</button>
+    </div>
+    <div class="list" id="video-list"></div>
+  </div>
+  <div class="main" id="main-panel">
+    <div class="placeholder">
+      <div class="placeholder-icon">▶</div>
+      <div class="placeholder-text">Select a video to read its summary</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '/api';
+let videos = [];
+let filter = 'all';
+let selected = null;
+let pollTimer = null;
+
+function fmt(sec){
+  if(!sec) return '';
+  const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=Math.floor(sec%60);
+  if(h) return `${h}h ${m}m`;
+  return `${m}m ${s<10?'0':''}${s}s`;
+}
+
+function fmtTs(sec){
+  if(sec==null) return '';
+  const m=Math.floor(sec/60), s=Math.floor(sec%60);
+  return `${m}:${s<10?'0':''}${s}`;
+}
+
+async function load(){
+  try{
+    const r = await fetch(`${API}/videos`);
+    videos = await r.json();
+    renderList();
+    if(selected) renderMain(selected);
+    const hasActive = videos.some(v=>v.status==='processing'||v.status==='queued');
+    clearTimeout(pollTimer);
+    if(hasActive) pollTimer = setTimeout(load, 3000);
+  }catch(e){ console.error(e); }
+}
+
+function setFilter(f, btn){
+  filter = f;
+  document.querySelectorAll('.pill').forEach(p=>p.classList.remove('on'));
+  btn.classList.add('on');
+  renderList();
+}
+
+function visible(){
+  if(filter==='all') return videos;
+  return videos.filter(v=>v.status===filter);
+}
+
+function renderList(){
+  const list = document.getElementById('video-list');
+  const vs = visible();
+  if(!vs.length){
+    list.innerHTML = `<div class="empty-list">No videos in this filter.<br>Add a YouTube URL above.</div>`;
+    return;
+  }
+  list.innerHTML = vs.map(v=>`
+    <div class="item${selected===v.id?' sel':''}" onclick="selectVideo(${v.id})">
+      <div class="thumb-box">
+        ${v.thumbnail
+          ? `<img src="${v.thumbnail}" alt="" />`
+          : `<div class="no-thumb">▶</div>`}
+      </div>
+      <div class="meta">
+        <div class="mtitle">${v.title||'Loading…'}</div>
+        <div class="msub">${v.channel||''} ${v.duration?'· '+fmt(v.duration):''}</div>
+      </div>
+      <div class="dot ${v.status}"></div>
+    </div>
+  `).join('');
+}
+
+async function selectVideo(id){
+  selected = id;
+  renderList();
+  const v = videos.find(x=>x.id===id);
+  if(v.status==='done'){
+    const r = await fetch(`${API}/videos/${id}`);
+    const detail = await r.json();
+    renderSummary(detail);
+  } else if(v.status==='processing'){
+    renderProcessing();
+  } else if(v.status==='error'){
+    renderError(id, v.error_msg);
+  } else {
+    renderQueued();
+  }
+}
+
+function renderMain(id){
+  const v = videos.find(x=>x.id===id);
+  if(!v) return;
+  if(v.status==='done') selectVideo(id);
+  else if(v.status==='processing') renderProcessing();
+  else if(v.status==='error') renderError(id, v.error_msg);
+  else renderQueued();
+}
+
+function renderSummary(detail){
+  const {title,channel,duration,status,chapters,summary} = detail;
+  const hasChapters = chapters && chapters.length > 0;
+  document.getElementById('main-panel').innerHTML = `
+    <div class="reader">
+      <div class="r-channel">${channel||''}</div>
+      <div class="r-title">${title}</div>
+      <div class="badges">
+        <span class="badge done">Summarized</span>
+        ${duration?`<span class="badge">${fmt(duration)}</span>`:''}
+        ${hasChapters?`<span class="badge">${chapters.length} chapters</span>`:''}
+      </div>
+      ${summary?.overall_summary ? `
+        <div class="summary-block">${summary.overall_summary}</div>
+      ` : ''}
+      ${summary?.key_points?.length ? `
+        <div class="section-label">Key takeaways</div>
+        <div class="kp-list">
+          ${summary.key_points.map(kp=>`
+            <div class="kp"><div class="kp-dot"></div><span>${kp}</span></div>
+          `).join('')}
+        </div>
+      ` : ''}
+      ${hasChapters ? `
+        <div class="section-label">Chapter summaries</div>
+        ${chapters.map(ch=>`
+          <div class="chapter-card">
+            <div class="ch-head">
+              <div class="ch-ts">${fmtTs(ch.start_sec)}</div>
+              <div class="ch-name">${ch.title}</div>
+            </div>
+            ${ch.summary ? `<div class="ch-body">${ch.summary}</div>` : ''}
+          </div>
+        `).join('')}
+      ` : ''}
+    </div>
+  `;
+}
+
+function renderProcessing(){
+  document.getElementById('main-panel').innerHTML = `
+    <div class="processing-view">
+      <div class="spinner"></div>
+      <div class="proc-msg">Summarizing — this takes about 30–60 seconds</div>
+    </div>
+  `;
+}
+
+function renderQueued(){
+  document.getElementById('main-panel').innerHTML = `
+    <div class="placeholder">
+      <div class="placeholder-icon" style="opacity:.4">⏳</div>
+      <div class="placeholder-text" style="color:#5e5d58">Waiting in queue…</div>
+    </div>
+  `;
+}
+
+function renderError(id, msg){
+  document.getElementById('main-panel').innerHTML = `
+    <div class="error-view">
+      <div class="err-label">Processing failed${msg?': '+msg:''}</div>
+      <button class="retry-btn" onclick="retry(${id})">Retry</button>
+    </div>
+  `;
+}
+
+async function retry(id){
+  await fetch(`${API}/videos/${id}/retry`, {method:'POST'});
+  await load();
+  selectVideo(id);
+}
+
+async function addVideo(){
+  const input = document.getElementById('url-input');
+  const btn = document.getElementById('add-btn');
+  const url = input.value.trim();
+  if(!url) return;
+  btn.disabled = true;
+  try{
+    const r = await fetch(`${API}/videos`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({url})
+    });
+    if(r.ok){
+      input.value = '';
+      await load();
+    } else {
+      const err = await r.json();
+      alert(err.detail || 'Failed to add video.');
+    }
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('url-input').addEventListener('keydown', e=>{
+  if(e.key==='Enter') addVideo();
+});
+
+load();
+</script>
+</body>
+</html>
