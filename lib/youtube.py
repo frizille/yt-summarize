@@ -47,12 +47,11 @@ def fetch_transcript(youtube_id: str) -> list[dict]:
     Tries English first, then any available transcript."""
     try:
         return YouTubeTranscriptApi.get_transcript(youtube_id, languages=["en", "en-US", "en-GB"])
-    except NoTranscriptFound:
+    except (NoTranscriptFound, TranscriptsDisabled):
         pass
-    except TranscriptsDisabled:
-        raise RuntimeError("Transcripts are disabled for this video.")
 
-    # Fall back to any available transcript (manual or auto-generated)
+    # Fall back to any available transcript (manual or auto-generated).
+    # Note: TranscriptsDisabled can be a false negative on cloud IPs, so we try anyway.
     try:
         transcript_list = YouTubeTranscriptApi.list_transcripts(youtube_id)
         transcript = next(iter(transcript_list))
