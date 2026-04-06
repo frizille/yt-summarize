@@ -2,20 +2,15 @@
 FastAPI app — single Vercel serverless entry point.
 All /api/* requests are rewritten here via vercel.json.
 
-Processing is decoupled via QStash:
-  POST /api/videos     → insert DB record, publish QStash job → 201 immediately
-  POST /api/process    → QStash webhook: runs full pipeline, always returns 200
-
-Other endpoints:
+  POST /api/videos              → insert DB record, kick off background processing
   GET  /api/videos              → list all videos
   GET  /api/videos/{id}         → video + chapters + summary
   GET  /api/videos/{id}/status  → polling endpoint
-  POST /api/videos/{id}/retry   → reset status, re-publish QStash job
+  POST /api/videos/{id}/retry   → reset status, re-run processing
   DELETE /api/videos/{id}       → remove from queue
 """
 
 import asyncio
-import json
 import os
 import sys
 from pathlib import Path
@@ -30,7 +25,6 @@ from pydantic import BaseModel
 import lib.database as db
 import lib.youtube as yt
 import lib.summarizer as sm
-import lib.qstash as qsh
 
 app = FastAPI(title="YT Summarizer")
 
@@ -130,34 +124,9 @@ async def add_video(body: AddVideoRequest):
     video = db.get_video(video_id)
 
     if video["status"] == "queued":
-        qsh.publish_job(video_id)
+        asyncio.create_task(_run_processing(video_id))
 
     return {"id": video_id, "youtube_id": youtube_id, "status": video["status"]}
-
-
-@app.post("/api/process")
-async def process_webhook(request: Request):
-    """
-    QStash webhook. Verifies the upstash-signature header, runs the pipeline,
-    and ALWAYS returns HTTP 200. Errors are written to the DB to prevent
-    QStash from retrying jobs that failed for a deterministic reason.
-    """
-    body_bytes = await request.body()
-    signature = request.headers.get("upstash-signature", "")
-    request_url = str(request.url).split("?")[0]
-
-    try:
-        qsh.verify_request(body_bytes, signature, request_url)
-    except Exception:
-        raise HTTPException(401, "Invalid QStash signature.")
-
-    payload = json.loads(body_bytes)
-    video_id = payload.get("video_id")
-
-    if video_id:
-        await _run_processing(video_id)
-
-    return {"ok": True}
 
 
 @app.get("/api/videos")
@@ -191,7 +160,7 @@ async def retry_video(video_id: int):
     if video["status"] not in ("error", "queued"):
         raise HTTPException(400, f"Cannot retry a video with status '{video['status']}'.")
     db.set_video_status(video_id, "queued")
-    qsh.publish_job(video_id)
+    asyncio.create_task(_run_processing(video_id))
     return {"status": "queued"}
 
 
