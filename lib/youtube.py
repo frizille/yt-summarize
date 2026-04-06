@@ -141,30 +141,32 @@ def _fetch_transcript_direct(youtube_id: str) -> list[dict]:
 def fetch_transcript(youtube_id: str) -> list[dict]:
     """Return list of {text, start, duration} segments."""
     # Try direct fetch first — more reliable on cloud IPs
+    direct_error = None
     try:
         return _fetch_transcript_direct(youtube_id)
-    except Exception:
-        pass
+    except Exception as e:
+        direct_error = str(e)
 
     # Fall back to youtube-transcript-api
     cookies = _cookies_path()
+    api_error = None
     try:
         return YouTubeTranscriptApi.get_transcript(
             youtube_id, languages=["en", "en-US", "en-GB"], cookies=cookies
         )
-    except (NoTranscriptFound, TranscriptsDisabled):
-        pass
+    except (NoTranscriptFound, TranscriptsDisabled) as e:
+        api_error = str(e)
+    except Exception as e:
+        api_error = str(e)
 
     try:
         transcript_list = YouTubeTranscriptApi.list_transcripts(youtube_id, cookies=cookies)
         transcript = next(iter(transcript_list))
         return transcript.fetch()
-    except StopIteration:
-        pass
-    except Exception:
-        pass
+    except Exception as e:
+        api_error = f"{api_error} | list: {e}"
 
-    raise RuntimeError("No transcript could be retrieved for this video.")
+    raise RuntimeError(f"Transcript unavailable. Direct: {direct_error} | API: {api_error}")
 
 
 def slice_transcript_for_chapter(transcript: list[dict], start_sec: float, end_sec: float | None) -> str:
