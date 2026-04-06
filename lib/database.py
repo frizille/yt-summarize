@@ -1,6 +1,6 @@
 """
 Supabase (PostgreSQL) persistence layer.
-Set DATABASE_URL to your Supabase Transaction pooler connection string (port 6543).
+Set POSTGRES_URL to your Supabase Transaction pooler connection string (port 6543).
 """
 
 import os
@@ -14,7 +14,7 @@ import psycopg2.extras
 @contextmanager
 def get_conn():
     conn = psycopg2.connect(
-        os.environ["DATABASE_URL"],
+        os.environ["POSTGRES_URL"],
         cursor_factory=psycopg2.extras.RealDictCursor,
     )
     # Auto-deserialize JSONB columns to Python objects on read
