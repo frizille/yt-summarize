@@ -43,11 +43,24 @@ def fetch_metadata(youtube_id: str) -> dict:
 
 
 def fetch_transcript(youtube_id: str) -> list[dict]:
-    """Return list of {text, start, duration} segments."""
+    """Return list of {text, start, duration} segments.
+    Tries English first, then any available transcript."""
     try:
-        return YouTubeTranscriptApi.get_transcript(youtube_id)
-    except (TranscriptsDisabled, NoTranscriptFound):
+        return YouTubeTranscriptApi.get_transcript(youtube_id, languages=["en", "en-US", "en-GB"])
+    except NoTranscriptFound:
+        pass
+    except TranscriptsDisabled:
+        raise RuntimeError("Transcripts are disabled for this video.")
+
+    # Fall back to any available transcript (manual or auto-generated)
+    try:
+        transcript_list = YouTubeTranscriptApi.list_transcripts(youtube_id)
+        transcript = next(iter(transcript_list))
+        return transcript.fetch()
+    except StopIteration:
         raise RuntimeError("No transcript available for this video.")
+    except Exception as e:
+        raise RuntimeError(f"Could not retrieve transcript: {e}")
 
 
 def slice_transcript_for_chapter(transcript: list[dict], start_sec: float, end_sec: float | None) -> str:
