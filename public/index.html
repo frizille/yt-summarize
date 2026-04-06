@@ -202,13 +202,15 @@ function fmtTs(sec){
 async function load(){
   try{
     const r = await apiFetch('/videos');
+    if(!r.ok){ console.error('GET /api/videos failed:', r.status); return; }
     videos = await r.json();
+    if(!Array.isArray(videos)){ console.error('Unexpected response:', videos); videos = []; }
     renderList();
     if(selected) renderMain(selected);
     const hasActive = videos.some(v=>v.status==='processing'||v.status==='queued');
     clearTimeout(pollTimer);
     if(hasActive) pollTimer = setTimeout(load, 3000);
-  }catch(e){ if(e.message !== 'Unauthorized') console.error(e); }
+  }catch(e){ if(e.message !== 'Unauthorized') console.error('load() error:', e); }
 }
 
 // ── Filters ────────────────────────────────────────────────────────────────────
@@ -365,9 +367,12 @@ async function addVideo(){
       input.value = '';
       await load();
     } else {
-      const err = await r.json();
-      alert(err.detail || 'Failed to add video.');
+      let msg = `Server error (${r.status}). Check Vercel function logs.`;
+      try { const err = await r.json(); msg = err.detail || msg; } catch {}
+      alert(msg);
     }
+  } catch(e) {
+    if(e.message !== 'Unauthorized') alert('Request failed: ' + e.message);
   } finally {
     btn.disabled = false;
   }
