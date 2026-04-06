@@ -1,10 +1,9 @@
 """
 Supabase (PostgreSQL) persistence layer.
-Set DATABASE_URL to your Supabase connection string (use the pooler URL for serverless).
+Set DATABASE_URL to your Supabase Transaction pooler connection string (port 6543).
 """
 
 import os
-import json
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
@@ -18,6 +17,8 @@ def get_conn():
         os.environ["DATABASE_URL"],
         cursor_factory=psycopg2.extras.RealDictCursor,
     )
+    # Auto-deserialize JSONB columns to Python objects on read
+    psycopg2.extras.register_default_jsonb(conn)
     try:
         yield conn
         conn.commit()
@@ -132,7 +133,7 @@ def save_summary(video_id: int, overall: str, key_points: list[str]):
                  overall_summary = EXCLUDED.overall_summary,
                  key_points      = EXCLUDED.key_points,
                  created_at      = EXCLUDED.created_at""",
-            (video_id, overall, json.dumps(key_points), _now()),
+            (video_id, overall, psycopg2.extras.Json(key_points), _now()),
         )
 
 
@@ -143,6 +144,4 @@ def get_summary(video_id: int) -> dict | None:
         row = cur.fetchone()
         if not row:
             return None
-        d = dict(row)
-        d["key_points"] = json.loads(d["key_points"] or "[]")
-        return d
+        return dict(row)  # key_points is a Python list — JSONB auto-deserialized

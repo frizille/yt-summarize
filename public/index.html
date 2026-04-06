@@ -88,9 +88,30 @@ html,body{height:100%;background:var(--bg0);color:var(--tx1);font-family:'IBM Pl
 .err-label{font-size:12px;color:var(--red)}
 .retry-btn{background:transparent;border:1px solid var(--bd);border-radius:6px;padding:7px 16px;font-size:11px;color:var(--tx2);cursor:pointer;font-family:inherit;transition:border-color .15s}
 .retry-btn:hover{border-color:var(--tx2)}
+
+/* ── API secret modal ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:100;display:flex;align-items:center;justify-content:center}
+.modal-box{background:var(--bg1);border:1px solid var(--bd);border-radius:10px;padding:28px 24px;width:300px;display:flex;flex-direction:column;gap:14px}
+.modal-title{font-size:12px;font-weight:500;color:var(--tx1);letter-spacing:.04em}
+.modal-desc{font-size:11px;color:var(--tx3);line-height:1.7}
+.modal-input{background:var(--bg2);border:1px solid var(--bd);border-radius:6px;padding:8px 10px;font-size:12px;color:var(--tx1);font-family:inherit;outline:none;transition:border-color .15s}
+.modal-input:focus{border-color:var(--acc)}
+.modal-btn{background:var(--acc);border:none;border-radius:6px;padding:9px;font-size:11px;font-weight:500;color:#fff;cursor:pointer;font-family:inherit;letter-spacing:.04em;transition:opacity .15s}
+.modal-btn:hover{opacity:.85}
 </style>
 </head>
 <body>
+
+<!-- API secret prompt (shown on first visit or after a 401) -->
+<div id="secret-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">Watch Queue</div>
+    <div class="modal-desc">Enter your API secret to continue.<br>This is stored locally and never sent to anyone else.</div>
+    <input type="password" id="secret-input" class="modal-input" placeholder="API secret…" autocomplete="current-password" />
+    <button class="modal-btn" onclick="saveSecret()">Continue</button>
+  </div>
+</div>
+
 <div class="layout">
   <div class="sidebar">
     <div class="top">
@@ -119,10 +140,49 @@ html,body{height:100%;background:var(--bg0);color:var(--tx1);font-family:'IBM Pl
 
 <script>
 const API = '/api';
+const SECRET_KEY = 'watch_queue_secret';
 let videos = [];
 let filter = 'all';
 let selected = null;
 let pollTimer = null;
+
+// ── API secret ─────────────────────────────────────────────────────────────────
+
+function showSecretModal() {
+  document.getElementById('secret-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('secret-input').focus(), 50);
+}
+
+function saveSecret() {
+  const val = document.getElementById('secret-input').value.trim();
+  if (!val) return;
+  localStorage.setItem(SECRET_KEY, val);
+  document.getElementById('secret-modal').style.display = 'none';
+  document.getElementById('secret-input').value = '';
+  load();
+}
+
+function apiHeaders(extra = {}) {
+  const secret = localStorage.getItem(SECRET_KEY);
+  const h = {'Content-Type': 'application/json', ...extra};
+  if (secret) h['X-Api-Secret'] = secret;
+  return h;
+}
+
+async function apiFetch(path, opts = {}) {
+  const r = await fetch(API + path, {
+    ...opts,
+    headers: apiHeaders(opts.headers || {}),
+  });
+  if (r.status === 401) {
+    localStorage.removeItem(SECRET_KEY);
+    showSecretModal();
+    throw new Error('Unauthorized');
+  }
+  return r;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function fmt(sec){
   if(!sec) return '';
@@ -137,17 +197,21 @@ function fmtTs(sec){
   return `${m}:${s<10?'0':''}${s}`;
 }
 
+// ── Data loading ───────────────────────────────────────────────────────────────
+
 async function load(){
   try{
-    const r = await fetch(`${API}/videos`);
+    const r = await apiFetch('/videos');
     videos = await r.json();
     renderList();
     if(selected) renderMain(selected);
     const hasActive = videos.some(v=>v.status==='processing'||v.status==='queued');
     clearTimeout(pollTimer);
     if(hasActive) pollTimer = setTimeout(load, 3000);
-  }catch(e){ console.error(e); }
+  }catch(e){ if(e.message !== 'Unauthorized') console.error(e); }
 }
+
+// ── Filters ────────────────────────────────────────────────────────────────────
 
 function setFilter(f, btn){
   filter = f;
@@ -160,6 +224,8 @@ function visible(){
   if(filter==='all') return videos;
   return videos.filter(v=>v.status===filter);
 }
+
+// ── Rendering ──────────────────────────────────────────────────────────────────
 
 function renderList(){
   const list = document.getElementById('video-list');
@@ -189,7 +255,7 @@ async function selectVideo(id){
   renderList();
   const v = videos.find(x=>x.id===id);
   if(v.status==='done'){
-    const r = await fetch(`${API}/videos/${id}`);
+    const r = await apiFetch(`/videos/${id}`);
     const detail = await r.json();
     renderSummary(detail);
   } else if(v.status==='processing'){
@@ -211,7 +277,7 @@ function renderMain(id){
 }
 
 function renderSummary(detail){
-  const {title,channel,duration,status,chapters,summary} = detail;
+  const {title,channel,duration,chapters,summary} = detail;
   const hasChapters = chapters && chapters.length > 0;
   document.getElementById('main-panel').innerHTML = `
     <div class="reader">
@@ -276,8 +342,10 @@ function renderError(id, msg){
   `;
 }
 
+// ── Actions ────────────────────────────────────────────────────────────────────
+
 async function retry(id){
-  await fetch(`${API}/videos/${id}/retry`, {method:'POST'});
+  await apiFetch(`/videos/${id}/retry`, {method:'POST'});
   await load();
   selectVideo(id);
 }
@@ -289,10 +357,9 @@ async function addVideo(){
   if(!url) return;
   btn.disabled = true;
   try{
-    const r = await fetch(`${API}/videos`, {
+    const r = await apiFetch('/videos', {
       method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({url})
+      body: JSON.stringify({url}),
     });
     if(r.ok){
       input.value = '';
@@ -306,11 +373,21 @@ async function addVideo(){
   }
 }
 
+// ── Init ───────────────────────────────────────────────────────────────────────
+
 document.getElementById('url-input').addEventListener('keydown', e=>{
   if(e.key==='Enter') addVideo();
 });
 
-load();
+document.getElementById('secret-input').addEventListener('keydown', e=>{
+  if(e.key==='Enter') saveSecret();
+});
+
+if(localStorage.getItem(SECRET_KEY) !== null){
+  load();
+} else {
+  showSecretModal();
+}
 </script>
 </body>
 </html>

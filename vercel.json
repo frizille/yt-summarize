@@ -1,10 +1,15 @@
 {
   "version": 2,
+  "functions": {
+    "api/index.py": {
+      "runtime": "python3.12",
+      "maxDuration": 300
+    }
+  },
   "builds": [
     {
       "src": "api/index.py",
-      "use": "@vercel/python",
-      "config": { "maxDuration": 300 }
+      "use": "@vercel/python"
     },
     {
       "src": "public/**",
